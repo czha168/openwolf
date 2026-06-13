@@ -8,8 +8,9 @@ import {
 } from "fs";
 import { join, dirname, basename, extname, relative, normalize } from "path";
 import { execSync } from "child_process";
-import { z } from "zod";
 import { tool } from "@opencode-ai/plugin";
+
+const z = tool.schema;
 
 // ─────────────────────────────────────────────
 // Constants
@@ -1161,7 +1162,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
       const toolName = input.tool;
 
       // --- Pre-Read: anatomy + graphify enrichment ---
-      if (toolName === "Read") {
+      if (toolName === "read") {
         const filePath = output.args?.filePath || output.args?.file_path || output.args?.path || "";
         if (!filePath || filePath.includes("/.wolf/") || filePath.includes("\\.wolf\\")) return;
         const normalizedFile = normalizePath(filePath);
@@ -1220,7 +1221,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
       }
 
       // --- Pre-Write/Edit: cerebrum + buglog ---
-      if (toolName === "Write" || toolName === "Edit") {
+      if (toolName === "write" || toolName === "edit") {
         const filePath = output.args?.filePath || output.args?.file_path || output.args?.path || "";
         if (!filePath) return;
         const normalizedFile = normalizePath(filePath);
@@ -1293,7 +1294,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
 
     "tool.execute.after": async (input, output) => {
       // --- Post-Read: token estimation ---
-      if (input.tool === "Read") {
+      if (input.tool === "read") {
         const filePath = input.args?.filePath || input.args?.file_path || input.args?.path || "";
         if (!filePath || filePath.includes("/.wolf/")) return;
         const normalizedFile = normalizePath(filePath);
@@ -1322,7 +1323,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
       }
 
       // --- Post-Write/Edit: anatomy update + memory + bug detection + graphify ---
-      if (input.tool === "Write" || input.tool === "Edit") {
+      if (input.tool === "write" || input.tool === "edit") {
         const filePath = input.args?.filePath || input.args?.file_path || input.args?.path || "";
         if (!filePath || filePath.includes("/.wolf/")) return;
         const normalizedFile = normalizePath(filePath);
@@ -1367,7 +1368,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
         const memoryFile = wolfPath(projectDir, "memory.md");
         const now = new Date();
         const timeHhMm = now.toTimeString().slice(0, 5);
-        const action = input.tool === "Write" ? "Created" : "Edited";
+        const action = input.tool === "write" ? "Created" : "Edited";
         const changeDesc = summarizeEdit(oldStr, newStr, fileBase);
         const writeTokens = estimateTokens(newStr || "", classifyFileType(filePath));
         const row = "| " + timeHhMm + " | " + action + " " + relPath + " | " + changeDesc + " | ~" + writeTokens + " |\n";
