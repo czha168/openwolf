@@ -157,10 +157,13 @@ function extractDescription(filePath) {
   let content;
   try {
     const fd = openSync(filePath, "r");
-    const buf = Buffer.alloc(12288);
-    const n = readSync(fd, buf, 0, 12288, 0);
-    closeSync(fd);
-    content = buf.subarray(0, n).toString("utf-8");
+    try {
+      const buf = Buffer.alloc(12288);
+      const n = readSync(fd, buf, 0, 12288, 0);
+      content = buf.subarray(0, n).toString("utf-8");
+    } finally {
+      try { closeSync(fd); } catch {}
+    }
   } catch {
     return "";
   }
@@ -930,6 +933,7 @@ let graphifyByFile = new Map();
 let graphifyLinks = [];
 let sessionMeta = { id: "", started: "", anatomyHits: 0, anatomyMisses: 0, repeatedWarned: 0, cerebrumWarnings: 0 };
 let updateTimer = null;
+let sessionStopped = false;
 
 // ─────────────────────────────────────────────
 // Graphify Data Loading
@@ -961,6 +965,8 @@ function loadGraphifyData(dir) {
 // ─────────────────────────────────────────────
 
 async function stopSession() {
+  if (sessionStopped) return;
+  sessionStopped = true;
   const sessionFile = wolfPath(projectDir, "_session.json");
   const session = readJson(sessionFile);
   if (!session) return;
@@ -1089,6 +1095,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
     // === Event hooks (session.created, session.idle) ===
     event: async ({ event }) => {
       if (event.type === "session.created") {
+        sessionStopped = false;
         const now = new Date();
         const dateStr = now.toISOString().split("T")[0];
         const timeStr = now.toTimeString().slice(0, 5).replace(":", "");
@@ -1266,7 +1273,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
 
         // Buglog search
         const buglog = readJson(wolfPath(projectDir, "buglog.json"));
-        if (buglog && buglog.bugs && buglog.bugs.length > 0) {
+        if (buglog && Array.isArray(buglog.bugs) && buglog.bugs.length > 0) {
           const tokenize = (s) => s.replace(/[^a-zA-Z0-9_\s]/g, "").split(/\s+/).filter(w => w.length > 3 && !STOP_WORDS.has(w.toLowerCase())).map(w => w.toLowerCase());
           const sameFileBugs = buglog.bugs.filter(b => basename(b.file || "") === fileBase);
           const editTokens = tokenize(newStr + " " + oldStr);
@@ -1382,6 +1389,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           if (detection) {
             const buglogFile = wolfPath(projectDir, "buglog.json");
             const buglog = readJson(buglogFile) || { version: 1, bugs: [] };
+            if (!Array.isArray(buglog.bugs)) buglog.bugs = [];
             const newBug = {
               id: "bug-" + String(buglog.bugs.length + 1).padStart(3, "0"),
               timestamp: now.toISOString(),
