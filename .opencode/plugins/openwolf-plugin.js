@@ -931,7 +931,19 @@ let writeHistory = new Map();
 let graphifyNodes = new Map();
 let graphifyByFile = new Map();
 let graphifyLinks = [];
-let sessionMeta = { id: "", started: "", anatomyHits: 0, anatomyMisses: 0, repeatedWarned: 0, cerebrumWarnings: 0 };
+let sessionMeta = {
+  id: "", started: "",
+  anatomyHits: 0, anatomyMisses: 0, repeatedWarned: 0, cerebrumWarnings: 0,
+  recordedCerebrumWarnings: [],
+  recordedBuglogMatches: [],
+  sessionNags: {
+    cerebrumEntryCount: null,
+    cerebrumDaysSinceUpdate: null,
+    cerebrumHoursSinceUpdate: null,
+    buglogIsEmpty: false,
+    multiEditFiles: [],
+  },
+};
 let updateTimer = null;
 let sessionStopped = false;
 
@@ -1053,22 +1065,22 @@ async function stopSession() {
     try { appendFileSync(memoryFile, row); } catch {}
   }
 
-  // Missing buglog nag
+  // Missing buglog nag — stored in sessionNags, surfaced via wolf_status
   const multiEditFiles = Object.entries(editCounts).filter(([, c]) => c >= REPEATED_EDIT_THRESHOLD).map(([f]) => f);
   if (multiEditFiles.length > 0) {
     const hasBuglogEdit = writtenFiles.some(f => f.includes("buglog.json"));
     if (!hasBuglogEdit) {
-      process.stderr.write("⚠️ OpenWolf: Files edited 3+ times (" + multiEditFiles.map(basename).join(", ") + ") but buglog.json was not updated.\n");
+      sessionMeta.sessionNags.multiEditFiles = multiEditFiles.map(basename);
     }
   }
 
-  // Cerebrum freshness nag
+  // Cerebrum freshness — stored in sessionNags, surfaced via wolf_status
   const cerebrumFile = wolfPath(projectDir, "cerebrum.md");
   if (existsSync(cerebrumFile) && writeCount >= 3) {
     const stat = statSync(cerebrumFile);
     const hoursSince = (Date.now() - stat.mtimeMs) / 3600000;
     if (hoursSince > 24) {
-      process.stderr.write("💡 OpenWolf: cerebrum.md hasn't been updated in " + Math.floor(hoursSince) + "h. Did you learn any preferences this session?\n");
+      sessionMeta.sessionNags.cerebrumHoursSinceUpdate = Math.floor(hoursSince);
     }
   }
 }
@@ -1088,7 +1100,6 @@ function scheduleGraphifyUpdate() {
       const after = readJson(manifestPath);
       const afterHash = after?.ast_hash || "";
       if (afterHash && afterHash !== beforeHash) {
-        process.stderr.write("🕸️ Graphify: knowledge graph updated.\n");
         loadGraphifyData(projectDir);
       }
     } catch {}
@@ -1124,6 +1135,15 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           id: "session-" + dateStr + "-" + timeStr,
           started: now.toISOString(),
           anatomyHits: 0, anatomyMisses: 0, repeatedWarned: 0, cerebrumWarnings: 0,
+          recordedCerebrumWarnings: [],
+          recordedBuglogMatches: [],
+          sessionNags: {
+            cerebrumEntryCount: null,
+            cerebrumDaysSinceUpdate: null,
+            cerebrumHoursSinceUpdate: null,
+            buglogIsEmpty: false,
+            multiEditFiles: [],
+          },
         };
         ensureWolfDir(projectDir);
         try {
@@ -1149,24 +1169,23 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
         try { appendFileSync(memoryFile, header); }
         catch { atomicWrite(memoryFile, header.trimStart()); }
 
-        // Cerebrum freshness check
+        // Cerebrum freshness check — stored in sessionNags, surfaced via wolf_status
         const cerebrumFile = wolfPath(projectDir, "cerebrum.md");
         if (existsSync(cerebrumFile)) {
           const content = readFileSync(cerebrumFile, "utf8");
           const entryLines = content.split("\n").filter(l => /^[-*]\s|\[.*\]/.test(l.trim()));
-          if (entryLines.length < 3) {
-            process.stderr.write("💡 OpenWolf: cerebrum.md has only " + entryLines.length + " entries. Learn from this session.\n");
-          } else {
+          sessionMeta.sessionNags.cerebrumEntryCount = entryLines.length;
+          if (entryLines.length >= 3) {
             const stat = statSync(cerebrumFile);
             const daysSince = (Date.now() - stat.mtimeMs) / 86400000;
-            if (daysSince > 3) process.stderr.write("💡 OpenWolf: cerebrum.md hasn't been updated in " + Math.floor(daysSince) + " days.\n");
+            sessionMeta.sessionNags.cerebrumDaysSinceUpdate = Math.floor(daysSince);
           }
         }
 
-        // Buglog emptiness check
+        // Buglog emptiness check — stored in sessionNags, surfaced via wolf_status
         const buglog = readJson(wolfPath(projectDir, "buglog.json"));
         if (buglog && Array.isArray(buglog.bugs) && buglog.bugs.length === 0) {
-          process.stderr.write("📋 OpenWolf: buglog.json is empty. Bugs will be auto-logged when detected.\n");
+          sessionMeta.sessionNags.buglogIsEmpty = true;
         }
 
         // Increment ledger
