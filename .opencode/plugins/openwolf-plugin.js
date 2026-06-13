@@ -1249,12 +1249,14 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
                   const escaped = pat.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
                   const re = new RegExp("\\b" + escaped + "\\b", "i");
                   if (re.test(combined)) {
-                    sessionMeta.recordedCerebrumWarnings.push({
-                      pattern: trimmed.slice(0, 120),
-                      file: fileBase,
-                      timestamp: new Date().toISOString(),
-                    });
                     sessionMeta.cerebrumWarnings++;
+                    if (sessionMeta.recordedCerebrumWarnings.length < 100) {
+                      sessionMeta.recordedCerebrumWarnings.push({
+                        pattern: trimmed.slice(0, 120),
+                        file: fileBase,
+                        timestamp: new Date().toISOString(),
+                      });
+                    }
                     break;
                   }
                 } catch {}
@@ -1281,11 +1283,13 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
             if (matched.length >= 2) break;
           }
           if (matched.length > 0) {
-            sessionMeta.recordedBuglogMatches.push({
-              bugIds: matched.map(b => b.id),
-              file: fileBase,
-              timestamp: new Date().toISOString(),
-            });
+            if (sessionMeta.recordedBuglogMatches.length < 100) {
+              sessionMeta.recordedBuglogMatches.push({
+                bugIds: matched.map(b => b.id),
+                file: fileBase,
+                timestamp: new Date().toISOString(),
+              });
+            }
           }
         }
       }
@@ -1295,7 +1299,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
       // --- Post-Read: token estimation ---
       if (input.tool === "read") {
         const filePath = input.args?.filePath || input.args?.file_path || input.args?.path || "";
-        if (!filePath || filePath.includes("/.wolf/")) return;
+        if (!filePath || filePath.includes("/.wolf/") || filePath.includes("\\.wolf\\")) return;
         const normalizedFile = normalizePath(filePath);
         const content = output.output || "";
         const type = classifyFileType(filePath);
@@ -1370,7 +1374,8 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
 
         // Append trailing block only if enrichment exists
         if (enrichParts.length > 0) {
-          output.output = (output.output || "") + "\n\n---\nOpenWolf: " + enrichParts.join(" | ") + "\n";
+          const base = (output.output || "").trimEnd();
+          output.output = base + (base ? "\n\n---\n" : "---\n") + "OpenWolf: " + enrichParts.join(" | ") + "\n";
         }
       }
 
@@ -1559,7 +1564,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
         description: "Search OpenWolf project intelligence — anatomy, cerebrum, memory, buglog",
         args: {
           query: z.string().describe("Search term"),
-          scope: z.enum(["anatomy", "cerebrum", "memory", "buglog", "all"]).default("all").describe("Scope to search"),
+          scope: z.enum(["anatomy", "cerebrum", "memory", "buglog", "recorded", "all"]).default("all").describe("Scope to search"),
         },
         execute: async ({ query, scope }, ctx) => {
           const results = [];
@@ -1597,6 +1602,18 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
                 if (text.toLowerCase().includes(q)) {
                   results.push("[buglog] [" + bug.id + "] " + bug.error_message + " — " + bug.root_cause);
                 }
+              }
+            }
+          }
+          if (scope === "all" || scope === "recorded") {
+            for (const w of sessionMeta.recordedCerebrumWarnings) {
+              if (w.pattern.toLowerCase().includes(q) || w.file.toLowerCase().includes(q)) {
+                results.push("[cerebrum-match] " + w.file + ': "' + w.pattern + '" (' + w.timestamp + ")");
+              }
+            }
+            for (const m of sessionMeta.recordedBuglogMatches) {
+              if (m.file.toLowerCase().includes(q) || m.bugIds.join(" ").toLowerCase().includes(q)) {
+                results.push("[buglog-match] " + m.file + ": bugs " + m.bugIds.join(", ") + " (" + m.timestamp + ")");
               }
             }
           }
