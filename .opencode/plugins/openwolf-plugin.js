@@ -18,7 +18,7 @@ const z = tool.schema;
 // ─────────────────────────────────────────────
 
 const WOLF_DIR = ".wolf";
-const CODE_EXTS = new Set([".ts", ".js", ".tsx", ".jsx", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".css", ".json", ".yaml", ".yml"]);
+const CODE_EXTS = new Set([".ts", ".js", ".tsx", ".jsx", ".mjs", ".cjs", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".css", ".json", ".yaml", ".yml"]);
 const PROSE_EXTS = new Set([".md", ".txt", ".rst"]);
 const CODE_TOKEN_RATIO = 3.5;
 const PROSE_TOKEN_RATIO = 4.0;
@@ -1094,6 +1094,7 @@ function scheduleGraphifyUpdate() {
     } catch {}
     updateTimer = null;
   }, 5000);
+  updateTimer.unref();
 }
 
 // ─────────────────────────────────────────────
@@ -1610,6 +1611,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
             lines.push("  " + n.label + " — " + (n.file_type || "?") + " in " + (n.source_file || "?") + " (community " + (n.community || "?") + ")");
           }
           if (depth >= 1) {
+            const directIds = new Set(direct.map(n => n.id));
             const relatedIds = new Set();
             for (const n of direct) {
               for (const link of graphifyLinks) {
@@ -1624,6 +1626,24 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
               for (const id of [...relatedIds].slice(0, 15)) {
                 const node = allNodes.get(id);
                 if (node) lines.push("  " + node.label + " (" + (node.file_type || "?") + ")");
+              }
+            }
+            if (depth >= 2) {
+              const twoHopIds = new Set();
+              for (const id of relatedIds) {
+                for (const link of graphifyLinks) {
+                  if (link.source === id && !relatedIds.has(link.target) && !directIds.has(link.target)) twoHopIds.add(link.target);
+                  if (link.target === id && !relatedIds.has(link.source) && !directIds.has(link.source)) twoHopIds.add(link.source);
+                }
+              }
+              if (twoHopIds.size > 0) {
+                lines.push("\n2-hop (" + twoHopIds.size + "):");
+                const allNodes = new Map();
+                for (const nodes of graphifyNodes.values()) for (const n of nodes) allNodes.set(n.id, n);
+                for (const id of [...twoHopIds].slice(0, 10)) {
+                  const node = allNodes.get(id);
+                  if (node) lines.push("  " + node.label + " (" + (node.file_type || "?") + ")");
+                }
               }
             }
           }
