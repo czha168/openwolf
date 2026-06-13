@@ -5,6 +5,7 @@
 import {
   existsSync, readFileSync, writeFileSync, appendFileSync,
   renameSync, readdirSync, unlinkSync, statSync, mkdirSync,
+  openSync, readSync, closeSync,
 } from "fs";
 import { join, dirname, basename, extname, relative, normalize } from "path";
 import { execSync } from "child_process";
@@ -155,10 +156,10 @@ function extractDescription(filePath) {
 
   let content;
   try {
-    const fd = require("fs").openSync(filePath, "r");
+    const fd = openSync(filePath, "r");
     const buf = Buffer.alloc(12288);
-    const n = require("fs").readSync(fd, buf, 0, 12288, 0);
-    require("fs").closeSync(fd);
+    const n = readSync(fd, buf, 0, 12288, 0);
+    closeSync(fd);
     content = buf.subarray(0, n).toString("utf-8");
   } catch {
     return "";
