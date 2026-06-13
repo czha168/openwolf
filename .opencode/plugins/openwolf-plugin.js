@@ -1498,8 +1498,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
         args: {},
         execute: async (_args, ctx) => {
           const lines = [];
-          lines.push("🐺 OpenWolf Status");
-          lines.push("==================");
+          lines.push("OpenWolf Status");
           lines.push("Session: " + sessionMeta.id);
           lines.push("Started: " + (sessionMeta.started || "not started"));
           lines.push("");
@@ -1517,6 +1516,41 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           lines.push("Cerebrum warnings: " + sessionMeta.cerebrumWarnings);
           lines.push("");
           lines.push("Graphify: " + graphifyNodes.size + " symbols, " + graphifyLinks.length + " relationships");
+          lines.push("");
+          // Cerebrum section
+          lines.push("Cerebrum:");
+          if (sessionMeta.sessionNags.cerebrumEntryCount !== null) {
+            lines.push("  Entries: " + sessionMeta.sessionNags.cerebrumEntryCount);
+          }
+          if (sessionMeta.sessionNags.cerebrumDaysSinceUpdate !== null) {
+            lines.push("  Days since update: " + sessionMeta.sessionNags.cerebrumDaysSinceUpdate);
+          }
+          if (sessionMeta.sessionNags.cerebrumHoursSinceUpdate !== null) {
+            lines.push("  Hours since update: " + sessionMeta.sessionNags.cerebrumHoursSinceUpdate);
+          }
+          lines.push("");
+          // Buglog section
+          lines.push("Buglog:");
+          const bl = readJson(wolfPath(projectDir, "buglog.json"));
+          if (bl && Array.isArray(bl.bugs)) {
+            lines.push("  Total bugs: " + bl.bugs.length);
+          } else {
+            lines.push("  Total bugs: 0");
+          }
+          if (sessionMeta.sessionNags.buglogIsEmpty) {
+            lines.push("  Status: empty (bugs will be auto-logged when detected)");
+          }
+          if (sessionMeta.sessionNags.multiEditFiles.length > 0) {
+            lines.push("  Multi-edit files missing buglog update: " + sessionMeta.sessionNags.multiEditFiles.join(", "));
+          }
+          lines.push("");
+          // Recorded warnings section
+          lines.push("Recorded warnings:");
+          lines.push("  Cerebrum matches this session: " + sessionMeta.recordedCerebrumWarnings.length);
+          lines.push("  Buglog matches this session: " + sessionMeta.recordedBuglogMatches.length);
+          if (sessionMeta.recordedCerebrumWarnings.length > 0 || sessionMeta.recordedBuglogMatches.length > 0) {
+            lines.push("  Use wolf_search for details.");
+          }
           return { title: "OpenWolf Status", output: lines.join("\n") };
         },
       }),
