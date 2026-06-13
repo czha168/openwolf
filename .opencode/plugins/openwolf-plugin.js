@@ -1211,63 +1211,9 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
     "tool.execute.before": async (input, output) => {
       const toolName = input.tool;
 
-      // --- Pre-Read: anatomy + graphify enrichment ---
+      // --- Pre-Read: no-op (enrichment moved to tool.execute.after) ---
       if (toolName === "read") {
-        const filePath = output.args?.filePath || output.args?.file_path || output.args?.path || "";
-        if (!filePath || filePath.includes("/.wolf/") || filePath.includes("\\.wolf\\")) return;
-        const normalizedFile = normalizePath(filePath);
-        const fileBase = basename(filePath);
-
-        // Repeated read warning
-        if (readHistory.has(normalizedFile)) {
-          const info = readHistory.get(normalizedFile);
-          info.count++;
-          sessionMeta.repeatedWarned++;
-          process.stderr.write("⚡ OpenWolf: " + fileBase + " was already read this session (~" + info.tokens + " tokens).\n");
-          return;
-        }
-
-        // Anatomy lookup
-        let anatomyFound = false;
-        for (const [sectionKey, entries] of anatomyCache.entries()) {
-          for (const entry of entries) {
-            const entryRelPath = normalizePath(sectionKey + "/" + entry.file);
-            if (normalizedFile.endsWith(entryRelPath) || normalizedFile.endsWith("/" + entryRelPath)) {
-              process.stderr.write("📋 OpenWolf anatomy: " + entry.file + " — " + entry.description + " (~" + entry.tokens + " tok)\n");
-              anatomyFound = true;
-              sessionMeta.anatomyHits++;
-              break;
-            }
-          }
-          if (anatomyFound) break;
-        }
-        if (!anatomyFound) sessionMeta.anatomyMisses++;
-
-        // Graphify enrichment
-        const relPath = normalizePath(relative(worktreeDir, filePath));
-        const graphNodes = graphifyByFile.get(relPath) || graphifyByFile.get(normalizedFile) || [];
-        if (graphNodes.length > 0) {
-          const topNodes = graphNodes.slice(0, 3);
-          const nodeDescs = topNodes.map(n => n.label + " (" + (n.file_type || "unknown") + ", community " + (n.community || "?") + ")").join("; ");
-          process.stderr.write("🕸️ Graphify: " + graphNodes.length + " node(s) in " + fileBase + ": " + nodeDescs + "\n");
-          const relatedIds = new Set();
-          for (const link of graphifyLinks) {
-            for (const n of topNodes) {
-              if (link.source === n.id) relatedIds.add(link.target);
-              if (link.target === n.id) relatedIds.add(link.source);
-            }
-          }
-          if (relatedIds.size > 0) {
-            const related = [...relatedIds].slice(0, 5).map(id => {
-              for (const nodes of graphifyNodes.values()) {
-                const found = nodes.find(n => n.id === id);
-                if (found) return found.label;
-              }
-              return id;
-            });
-            process.stderr.write("🕸️ Related: " + related.join(", ") + "\n");
-          }
-        }
+        return;
       }
 
       // --- Pre-Write/Edit: cerebrum + buglog ---
