@@ -1,7 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
-    ".opencode/plugins/graphify.js",
     ".opencode/plugins/openwolf-plugin.js"
   ]
 }

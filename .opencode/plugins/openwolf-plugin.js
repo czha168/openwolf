@@ -960,6 +960,26 @@ function loadGraphifyData(dir) {
   } catch {}
 }
 
+function computeGodNodes(limit = 10) {
+  if (graphifyLinks.length === 0) return [];
+  const degreeMap = new Map();
+  for (const link of graphifyLinks) {
+    if (link.source) degreeMap.set(link.source, (degreeMap.get(link.source) || 0) + 1);
+    if (link.target) degreeMap.set(link.target, (degreeMap.get(link.target) || 0) + 1);
+  }
+  const sorted = [...degreeMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
+  const result = [];
+  for (const [id, degree] of sorted) {
+    let label = id, community = "?", fileType = "?", sourceFile = "";
+    for (const nodes of graphifyNodes.values()) {
+      const found = nodes.find(n => n.id === id);
+      if (found) { label = found.label; community = found.community || "?"; fileType = found.file_type || "?"; sourceFile = found.source_file || ""; break; }
+    }
+    result.push({ label, degree, community, fileType, sourceFile });
+  }
+  return result;
+}
+
 // ─────────────────────────────────────────────
 // Session Stop (shared by event.idle and dispose)
 // ─────────────────────────────────────────────
@@ -1021,7 +1041,7 @@ async function stopSession() {
     if (info.count > 1) savedFromRepeats += info.tokens * (info.count - 1);
   }
   lt.estimated_savings_vs_bare_cli = (lt.estimated_savings_vs_bare_cli || 0) + savedFromAnatomy + savedFromRepeats;
-  writeJson(ledgerFile, ledger);
+  try { writeJson(ledgerFile, ledger); } catch {}
 
   // Memory summary
   if (writeCount > 0) {
@@ -1105,12 +1125,14 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           anatomyHits: 0, anatomyMisses: 0, repeatedWarned: 0, cerebrumWarnings: 0,
         };
         ensureWolfDir(projectDir);
-        writeJson(wolfPath(projectDir, "_session.json"), {
-          session_id: sessionMeta.id, started: sessionMeta.started,
-          files_read: {}, files_written: [], edit_counts: {},
-          anatomy_hits: 0, anatomy_misses: 0,
-          repeated_reads_warned: 0, cerebrum_warnings: 0, stop_count: 0,
-        });
+        try {
+          writeJson(wolfPath(projectDir, "_session.json"), {
+            session_id: sessionMeta.id, started: sessionMeta.started,
+            files_read: {}, files_written: [], edit_counts: {},
+            anatomy_hits: 0, anatomy_misses: 0,
+            repeated_reads_warned: 0, cerebrum_warnings: 0, stop_count: 0,
+          });
+        } catch {}
 
         // Load anatomy cache
         const anatomyFile = wolfPath(projectDir, "anatomy.md");
@@ -1142,7 +1164,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
 
         // Buglog emptiness check
         const buglog = readJson(wolfPath(projectDir, "buglog.json"));
-        if (buglog && buglog.bugs && buglog.bugs.length === 0) {
+        if (buglog && Array.isArray(buglog.bugs) && buglog.bugs.length === 0) {
           process.stderr.write("📋 OpenWolf: buglog.json is empty. Bugs will be auto-logged when detected.\n");
         }
 
@@ -1150,7 +1172,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
         const ledgerFile = wolfPath(projectDir, "token-ledger.json");
         const ledger = readJson(ledgerFile) || { sessions: [], lifetime: { total_tokens_estimated: 0, total_reads: 0, total_writes: 0, total_sessions: 0, anatomy_hits: 0, anatomy_misses: 0, repeated_reads_blocked: 0, estimated_savings_vs_bare_cli: 0 } };
         ledger.lifetime.total_sessions++;
-        writeJson(ledgerFile, ledger);
+        try { writeJson(ledgerFile, ledger); } catch {}
 
         // Clean stale .tmp files
         try {
@@ -1326,7 +1348,37 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           if (!session.files_read) session.files_read = {};
           const info = readHistory.get(normalizedFile);
           session.files_read[normalizedFile] = { count: info.count, tokens, first_read: info.firstRead };
-          writeJson(sessionFile, session);
+          try { writeJson(sessionFile, session); } catch {}
+        }
+
+        const enrichParts = [];
+        for (const [, entries] of anatomyCache.entries()) {
+          const entry = entries.find(e => normalizedFile.endsWith(normalizePath(e.file)));
+          if (entry) { enrichParts.push("📋 " + entry.file + ": " + entry.description + " (~" + entry.tokens + " tok)"); break; }
+        }
+        const relPath = normalizePath(relative(worktreeDir, filePath));
+        const graphNodes = graphifyByFile.get(relPath) || graphifyByFile.get(normalizedFile) || [];
+        if (graphNodes.length > 0) {
+          const relatedIds = new Set();
+          for (const link of graphifyLinks) {
+            for (const n of graphNodes.slice(0, 3)) {
+              if (link.source === n.id) relatedIds.add(link.target);
+              if (link.target === n.id) relatedIds.add(link.source);
+            }
+          }
+          if (relatedIds.size > 0) {
+            const related = [...relatedIds].slice(0, 5).map(id => {
+              for (const nodes of graphifyNodes.values()) {
+                const found = nodes.find(n => n.id === id);
+                if (found) return found.label;
+              }
+              return id;
+            });
+            enrichParts.push("🕸️ Related: " + related.join(", "));
+          }
+        }
+        if (enrichParts.length > 0) {
+          output.output = "[OpenWolf] " + enrichParts.join(" | ") + "\n\n" + (output.output || "");
         }
       }
 
@@ -1369,7 +1421,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           if (existingIdx >= 0) entries[existingIdx] = entry;
           else entries.push(entry);
           // Persist anatomy
-          atomicWrite(wolfPath(projectDir, "anatomy.md"), serializeAnatomy(anatomyCache));
+          try { atomicWrite(wolfPath(projectDir, "anatomy.md"), serializeAnatomy(anatomyCache)); } catch {}
         }
 
         // Memory log
@@ -1415,11 +1467,11 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
             } else {
               buglog.bugs.push(newBug);
             }
-            writeJson(buglogFile, buglog);
+            try { writeJson(buglogFile, buglog); } catch {}
           }
         }
 
-        writeJson(sessionFile, session);
+        try { writeJson(sessionFile, session); } catch {}
 
         // Graphify auto-update
         scheduleGraphifyUpdate();
@@ -1432,7 +1484,10 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
       const anatomyCount = [...anatomyCache.values()].reduce((sum, entries) => sum + entries.length, 0);
       parts.push("[OpenWolf] Project intelligence active. " + anatomyCount + " files indexed. " + readHistory.size + " files read this session. Use wolf_status, wolf_search, wolf_graph tools.");
       if (graphifyNodes.size > 0) {
-        parts.push("[Graphify] " + graphifyNodes.size + " indexed symbols, " + graphifyLinks.length + " relationships. Use wolf_graph tool for queries.");
+        const godNodes = computeGodNodes(10);
+        const nodeLines = godNodes.map(n => "  - " + n.label + " (deg " + n.degree + ", community " + n.community + ")" + (n.sourceFile ? " [" + basename(n.sourceFile) + "]" : ""));
+        const graphPart = "[Graphify] " + graphifyNodes.size + " symbols, " + graphifyLinks.length + " relationships.";
+        parts.push(nodeLines.length > 0 ? graphPart + "\nKey nodes:\n" + nodeLines.join("\n") + "\nUse wolf_graph tool for queries." : graphPart);
       }
       if (parts.length > 0) output.system.push(parts.join("\n\n"));
     },
