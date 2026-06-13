@@ -1249,7 +1249,11 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
                   const escaped = pat.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
                   const re = new RegExp("\\b" + escaped + "\\b", "i");
                   if (re.test(combined)) {
-                    process.stderr.write("⚠️ OpenWolf cerebrum warning: \"" + trimmed.slice(0, 120) + "\" — check your code.\n");
+                    sessionMeta.recordedCerebrumWarnings.push({
+                      pattern: trimmed.slice(0, 120),
+                      file: fileBase,
+                      timestamp: new Date().toISOString(),
+                    });
                     sessionMeta.cerebrumWarnings++;
                     break;
                   }
@@ -1277,12 +1281,11 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
             if (matched.length >= 2) break;
           }
           if (matched.length > 0) {
-            process.stderr.write("📋 OpenWolf buglog: " + matched.length + " past bug(s) for " + fileBase + ":\n");
-            for (const bug of matched) {
-              process.stderr.write("   [" + bug.id + "] \"" + (bug.error_message || "").slice(0, 70) + "\"\n");
-              process.stderr.write("   Cause: " + (bug.root_cause || "").slice(0, 80) + "\n");
-              process.stderr.write("   Fix: " + (bug.fix || "").slice(0, 80) + "\n");
-            }
+            sessionMeta.recordedBuglogMatches.push({
+              bugIds: matched.map(b => b.id),
+              file: fileBase,
+              timestamp: new Date().toISOString(),
+            });
           }
         }
       }
