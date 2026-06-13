@@ -1391,10 +1391,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
         if (!session.edit_counts) session.edit_counts = {};
         session.edit_counts[relPath] = (session.edit_counts[relPath] || 0) + 1;
 
-        // Repeated-edit warning
-        if (session.edit_counts[relPath] >= REPEATED_EDIT_THRESHOLD) {
-          process.stderr.write("⚠️ OpenWolf: " + fileBase + " edited " + session.edit_counts[relPath] + " times. Log bugs to .wolf/buglog.json.\n");
-        }
+        // Repeated-edit tracking — state already in session.edit_counts, queryable via wolf_status
 
         // Anatomy update
         const newStr = input.args?.newString || input.args?.content || "";
