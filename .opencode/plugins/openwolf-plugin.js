@@ -1472,6 +1472,7 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
       const parts = [];
       const anatomyCount = [...anatomyCache.values()].reduce((sum, entries) => sum + entries.length, 0);
       parts.push("[OpenWolf] Project intelligence active. " + anatomyCount + " files indexed. " + readHistory.size + " files read this session. Use wolf_status, wolf_search, wolf_graph tools.");
+      parts.push("[OpenWolf] Before writing to files, query wolf_search (scope: buglog, cerebrum) for known issues.");
       if (graphifyNodes.size > 0) {
         const godNodes = computeGodNodes(10);
         const nodeLines = godNodes.map(n => "  - " + n.label + " (deg " + n.degree + ", community " + n.community + ")" + (n.sourceFile ? " [" + basename(n.sourceFile) + "]" : ""));
