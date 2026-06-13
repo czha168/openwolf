@@ -1304,7 +1304,10 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           }
         }
         if (readHistory.has(normalizedFile)) {
-          readHistory.get(normalizedFile).tokens = tokens;
+          const info = readHistory.get(normalizedFile);
+          info.count++;
+          info.tokens = tokens;
+          sessionMeta.repeatedWarned++;
         } else {
           readHistory.set(normalizedFile, { count: 1, tokens, firstRead: new Date().toISOString() });
         }
@@ -1317,11 +1320,29 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
           try { writeJson(sessionFile, session); } catch {}
         }
 
+        // Build trailing enrichment block (anatomy + graphify + repeated-read)
         const enrichParts = [];
+
+        // Anatomy lookup (moved from before-hook)
+        let anatomyFound = false;
         for (const [, entries] of anatomyCache.entries()) {
           const entry = entries.find(e => normalizedFile.endsWith(normalizePath(e.file)));
-          if (entry) { enrichParts.push("📋 " + entry.file + ": " + entry.description + " (~" + entry.tokens + " tok)"); break; }
+          if (entry) {
+            enrichParts.push(entry.file + ": " + entry.description + " (~" + entry.tokens + " tok)");
+            anatomyFound = true;
+            break;
+          }
         }
+        if (anatomyFound) sessionMeta.anatomyHits++;
+        else sessionMeta.anatomyMisses++;
+
+        // Repeated-read advisory
+        const readInfo = readHistory.get(normalizedFile);
+        if (readInfo && readInfo.count > 1) {
+          enrichParts.push("already read (count: " + readInfo.count + ", ~" + readInfo.tokens + " tokens)");
+        }
+
+        // Graphify enrichment
         const relPath = normalizePath(relative(worktreeDir, filePath));
         const graphNodes = graphifyByFile.get(relPath) || graphifyByFile.get(normalizedFile) || [];
         if (graphNodes.length > 0) {
@@ -1340,11 +1361,13 @@ export const OpenWolfPlugin = async ({ directory, worktree }) => {
               }
               return id;
             });
-            enrichParts.push("🕸️ Related: " + related.join(", "));
+            enrichParts.push("Related: " + related.join(", "));
           }
         }
+
+        // Append trailing block only if enrichment exists
         if (enrichParts.length > 0) {
-          output.output = "[OpenWolf] " + enrichParts.join(" | ") + "\n\n" + (output.output || "");
+          output.output = (output.output || "") + "\n\n---\nOpenWolf: " + enrichParts.join(" | ") + "\n";
         }
       }
 
