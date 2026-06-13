@@ -48,3 +48,13 @@ openwolf-readme-prompt.md
 .opencode/package-lock.json
 .opencode/bun.lock
 .opencode/.gitignore
+
+# Auto-generated OpenSpec tooling
+.opencode/commands/opsx-*.md
+.opencode/skills/openspec-*/
+
+# Generated graphify output
+graphify-out/
+
+# Old graphify plugin (superseded by openwolf-plugin)
+.opencode/plugins/graphify.js
