@@ -43,3 +43,8 @@ openwolf-icon.zip
 openwolf-blueprint.md
 openwolf-readme-prompt.md
 .worktrees/
+.opencode/node_modules
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock
+.opencode/.gitignore
